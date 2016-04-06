@@ -1,2 +1,2 @@
 build:
-	ldc main.d
+	ldc main.d uploaders.d

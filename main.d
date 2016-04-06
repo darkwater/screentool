@@ -6,8 +6,11 @@ import std.format: formattedRead;
 import std.process: environment, execute, pipeProcess, Redirect;
 import std.string: chomp;
 
+import std.getopt;
 import std.json;
 import std.stdio;
+
+import uploaders;
 
 /*
 
@@ -41,28 +44,46 @@ struct SlopResult
     string geometry;
 }
 
+enum Selector
+{
+    area,
+    window,
+    screen,
+    full
+}
+
+enum UploadTarget
+{
+    novaember,
+    imgur,
+    pomf
+}
+
+struct ScreentoolOptions
+{
+    Selector selector;
+    UploadTarget[] uploadTargets;
+}
+
+ScreentoolOptions options;
+
 int main(string[] args)
 {
-    // Program input
-    string   selector = args[1];
-    string[] actions  = args[2..$];
+    auto helpInformation = getopt(args,
+            "s|selector", "Method to use for selection", &options.selector,
+            "u|upload",   "Upload image after capture",  &options.uploadTargets);
 
 
     // Stage one: selection
 
     string geometry;
 
-    switch (selector)
+    final switch (options.selector)
     {
-        case "select-area":
-            geometry = area_selectArea();
-            break;
-        case "test":
-            geometry = area_test();
-            break;
-        default:
-            writeln("Unknown selector " ~ selector);
-            return 1;
+        case Selector.area:   geometry = area_selectArea(); break;
+        case Selector.window: geometry = area_test();       break;
+        case Selector.screen: geometry = area_test();       break;
+        case Selector.full:   geometry = area_test();       break;
     }
 
 
@@ -81,41 +102,25 @@ int main(string[] args)
     }
 
 
-    // Stage three: actions
+    // Stage three: uploads
 
-    foreach (action; actions) switch (action)
+    foreach (target; options.uploadTargets) final switch (target)
     {
-        case "upload":
-            // TODO: Optionally read directly from env var
-            string secret = read(environment.get("HOME") ~ "/.nvsecret").text.chomp;
-
-            // TODO: Use libcurl
-            auto curl = execute([ "curl", "-s", "http://status.novaember.com/image",
-                    "-F", "file=@" ~ filepath,
-                    "-F", "secret=" ~ secret ]);
-
-            // TODO: Handle issues
-            JSONValue json = parseJSON(curl.output);
-            string url = json["url"].str;
-
-            auto xclipPrimary   = pipeProcess([ "xclip", "-selection", "primary"   ], Redirect.stdin);
-            auto xclipClipboard = pipeProcess([ "xclip", "-selection", "clipboard" ], Redirect.stdin);
-
-            xclipPrimary.stdin.write(url);
-            xclipClipboard.stdin.write(url);
-
-            break;
-
-        case "feh":
-            execute([ "feh", filepath ]);
-            break;
-
-        default:
-            writeln("Unknown action " ~ action);
-            break;
+        case UploadTarget.novaember: uploaders.novaember(filepath).copyToClipboard(); break;
+        case UploadTarget.imgur:     uploaders.imgur    (filepath).copyToClipboard(); break;
+        case UploadTarget.pomf:      uploaders.pomf     (filepath).copyToClipboard(); break;
     }
 
     return 0;
+}
+
+void copyToClipboard(string text)
+{
+    auto xclipPrimary   = pipeProcess([ "xclip", "-selection", "primary"   ], Redirect.stdin);
+    auto xclipClipboard = pipeProcess([ "xclip", "-selection", "clipboard" ], Redirect.stdin);
+
+    xclipPrimary.stdin.write(text);
+    xclipClipboard.stdin.write(text);
 }
 
 string area_selectArea()
