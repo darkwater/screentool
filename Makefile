@@ -1,0 +1,2 @@
+build:
+	ldc main.d
