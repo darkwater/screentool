@@ -2,7 +2,7 @@ module screentool;
 
 import std.conv: text;
 import std.file: read;
-import std.format: formattedRead;
+import std.format: format, formattedRead;
 import std.process: environment, execute, pipeProcess, Redirect;
 import std.string: chomp;
 
@@ -10,13 +10,16 @@ import std.getopt;
 import std.json;
 import std.stdio;
 
+import x11.X;
+import x11.Xlib;
+
 import uploaders;
 
 /*
 
     Screenshots:
     ✔ select area
-    - current window [padding]
+    ✔ current window [padding]
     - current screen
     - all screens
 
@@ -80,10 +83,10 @@ int main(string[] args)
 
     final switch (options.selector)
     {
-        case Selector.area:   geometry = area_selectArea(); break;
-        case Selector.window: geometry = area_test();       break;
-        case Selector.screen: geometry = area_test();       break;
-        case Selector.full:   geometry = area_test();       break;
+        case Selector.area:   geometry = select_area();   break;
+        case Selector.window: geometry = select_window(); break;
+        case Selector.screen: geometry = select_screen(); break;
+        case Selector.full:   geometry = select_full();   break;
     }
 
 
@@ -123,7 +126,21 @@ void copyToClipboard(string text)
     xclipClipboard.stdin.write(text);
 }
 
-string area_selectArea()
+XWindowAttributes getActiveWindow()
+{
+    Display* display = XOpenDisplay(null);
+
+    Window window;
+    int revertTo;
+    XGetInputFocus(display, &window, &revertTo);
+
+    XWindowAttributes windowAttributes;
+    XGetWindowAttributes(display, window, &windowAttributes);
+
+    return windowAttributes;
+}
+
+string select_area()
 {
     auto slop = execute([ "slop", "--nokeyboard", "-c", "1,0.68,0", "-b", "1" ]);
 
@@ -146,7 +163,31 @@ string area_selectArea()
     return slopResult.geometry;
 }
 
-string area_test()
+string select_window()
+{
+    auto windowAttributes = getActiveWindow();
+
+    return format("%dx%d%+d%+d",
+            windowAttributes.width,
+            windowAttributes.height,
+            windowAttributes.x,
+            windowAttributes.y);
+}
+
+string select_screen()
+{
+    auto windowAttributes = getActiveWindow();
+
+    int centerX = windowAttributes.x + windowAttributes.width / 2;
+    int centerY = windowAttributes.y + windowAttributes.height / 2;
+
+    return format("%dx%d%+d%+d",
+            windowAttributes.width,
+            windowAttributes.height,
+            0, 0);
+}
+
+string select_full()
 {
     return "200x100+50+50";
 }

@@ -1,0 +1,5 @@
+name "screentool"
+description "A program for making and uploading screenshots"
+copyright "Copyright © 2016, Darkwater"
+authors "Darkwater"
+dependency "x11" version="~>1.0.14"
