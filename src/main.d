@@ -1,14 +1,16 @@
 module screentool;
 
-import std.conv: text;
-import std.file: read;
-import std.format: format, formattedRead;
-import std.process: environment, execute, pipeProcess, Redirect;
-import std.string: chomp;
-
+import std.algorithm;
+import std.conv;
+import std.file;
+import std.format;
 import std.getopt;
 import std.json;
+import std.process;
+import std.regex;
+import std.range;
 import std.stdio;
+import std.string;
 
 import x11.X;
 import x11.Xlib;
@@ -66,6 +68,36 @@ struct ScreentoolOptions
 {
     Selector selector;
     UploadTarget[] uploadTargets;
+}
+
+struct Geometry
+{
+    uint width, height;
+    int x, y;
+
+    static Geometry opCall(string str)
+    {
+        auto match = str.matchFirst(regex(r"(\d+)x(\d+)\+(\d+)\+(\d+)"));
+
+        Geometry g;
+        g.width = match[1].to!uint;
+        g.height = match[2].to!uint;
+        g.x = match[3].to!int;
+        g.y = match[4].to!int;
+        return g;
+    }
+
+    bool containsPoint(int x, int y)
+    {
+        return ( x > this.x && y > this.y
+              && x < this.x + this.width
+              && y < this.y + this.height );
+    }
+
+    string str()
+    {
+        return format("%dx%d%+d%+d", width, height, x, y);
+    }
 }
 
 ScreentoolOptions options;
@@ -178,13 +210,20 @@ string select_screen()
 {
     auto windowAttributes = getActiveWindow();
 
+    // Find the first screen that contains the center of this window
     int centerX = windowAttributes.x + windowAttributes.width / 2;
     int centerY = windowAttributes.y + windowAttributes.height / 2;
 
-    return format("%dx%d%+d%+d",
-            windowAttributes.width,
-            windowAttributes.height,
-            0, 0);
+    auto xrandr = execute([ "xrandr", "--current" ]);
+
+    // Example line: VGA1 connected primary 1920x1200+0+0 (normal left inverted right x axis y axis) 518mm x 324mm
+    auto screens = xrandr.output.splitLines()
+        .filter!(line => line.canFind(" connected ")) // Spaces are important; don't match 'disconnected'
+        .map!(line => Geometry(line)); // Extract geometries
+
+    Geometry screen = screens.filter!(geom => geom.containsPoint(centerX, centerY)).front;
+
+    return screen.str;
 }
 
 string select_full()
