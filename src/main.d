@@ -46,7 +46,7 @@ import uploaders;
 struct SlopResult
 {
     int x, y, w, h, windowId;
-    string geometry;
+    Geometry geometry;
 }
 
 enum Selector
@@ -62,12 +62,6 @@ enum UploadTarget
     novaember,
     imgur,
     pomf
-}
-
-struct ScreentoolOptions
-{
-    Selector selector;
-    UploadTarget[] uploadTargets;
 }
 
 struct Geometry
@@ -87,6 +81,16 @@ struct Geometry
         return g;
     }
 
+    static Geometry opCall(uint width, uint height, int x, int y)
+    {
+        Geometry g;
+        g.width = width;
+        g.height = height;
+        g.x = x;
+        g.y = y;
+        return g;
+    }
+
     bool containsPoint(int x, int y)
     {
         return ( x > this.x && y > this.y
@@ -100,33 +104,78 @@ struct Geometry
     }
 }
 
+struct ScreentoolOptions
+{
+    UploadTarget[] uploadTargets;
+    bool printUploadTargets;
+
+    bool slop;
+    bool captureWindow;
+    bool captureScreen;
+    bool captureEverything;
+
+    bool isValid(ref string message)
+    {
+        switch ([ slop, captureWindow, captureScreen, captureEverything ].sum)
+        {
+            case 0:
+                captureEverything = true;
+                break;
+            case 1:
+                break;
+            default:
+                message = "Can't take more than one of -s, -W, -S, -D!";
+                return false;
+        }
+
+        assert([ slop, captureWindow, captureScreen, captureEverything ].sum == 1);
+
+        return true;
+    }
+}
+
 ScreentoolOptions options;
 
 int main(string[] args)
 {
+    // Don't forget to update ScreentoolOptions#isValid when changing options
     auto helpInformation = getopt(args,
-            "s|selector", "Method to use for selection", &options.selector,
-            "u|upload",   "Upload image after capture",  &options.uploadTargets);
+            std.getopt.config.caseSensitive,
+            "s|slop",             "Select an area with the cursor",                   &options.slop,
+            "W|capture-window",   "Capture the currently active window",              &options.captureWindow,
+            "S|capture-screen",   "Capture the screen containing the active window",  &options.captureScreen,
+            "D|capture-desktop",  "Capture the entire desktop (default)",             &options.captureEverything,
+            "u|upload",           "Upload image after capture",                       &options.uploadTargets,
+            "U|upload-targets",   "Print available upload targets",                   &options.printUploadTargets);
 
+    if (helpInformation.helpWanted)
+    {
+        defaultGetoptPrinter("screentool v\n" ~ "0.1.0", helpInformation.options);
+        return 0;
+    }
+
+    string message;
+    if (!options.isValid(message))
+    {
+        writeln(message);
+        return 1;
+    }
 
     // Stage one: selection
 
-    string geometry;
+    Geometry geometry;
 
-    final switch (options.selector)
-    {
-        case Selector.area:   geometry = select_area();   break;
-        case Selector.window: geometry = select_window(); break;
-        case Selector.screen: geometry = select_screen(); break;
-        case Selector.full:   geometry = select_full();   break;
-    }
+    if (options.slop)              geometry = selectOperation().geometry;
+    if (options.captureWindow)     geometry = getActiveWindowGeometry();
+    if (options.captureScreen)     geometry = getActiveScreenGeometry();
+    if (options.captureEverything) geometry = getDesktopGeometry();
 
 
     // Stage two: capture
 
     string filepath = "/tmp/screenshot.png";
 
-    string[] maimCmdline = [ "maim", "-g", geometry, filepath ];
+    string[] maimCmdline = [ "maim", "-g", geometry.str, filepath ];
 
     auto maim = execute(maimCmdline);
 
@@ -137,7 +186,7 @@ int main(string[] args)
     }
 
 
-    // Stage three: uploads
+    // Stage three: post actions
 
     foreach (target; options.uploadTargets) final switch (target)
     {
@@ -172,41 +221,40 @@ XWindowAttributes getActiveWindow()
     return windowAttributes;
 }
 
-string select_area()
+SlopResult selectOperation()
 {
+    SlopResult slopResult;
     auto slop = execute([ "slop", "--nokeyboard", "-c", "1,0.68,0", "-b", "1" ]);
 
     if (slop.status != 0)
     {
         write(slop.output);
-        return "";
+        return slopResult;
     }
 
-    SlopResult slopResult;
+    string geometry;
 
     formattedRead(slop.output, "X=%d\nY=%d\nW=%d\nH=%d\nG=%s\nID=%d\n",
             &slopResult.x,
             &slopResult.y,
             &slopResult.w,
             &slopResult.h,
-            &slopResult.geometry,
+            &geometry,
             &slopResult.windowId);
 
-    return slopResult.geometry;
+    slopResult.geometry = Geometry(geometry);
+
+    return slopResult;
 }
 
-string select_window()
+Geometry getActiveWindowGeometry()
 {
     auto windowAttributes = getActiveWindow();
 
-    return format("%dx%d%+d%+d",
-            windowAttributes.width,
-            windowAttributes.height,
-            windowAttributes.x,
-            windowAttributes.y);
+    return Geometry(windowAttributes.width, windowAttributes.height, windowAttributes.x, windowAttributes.y);
 }
 
-string select_screen()
+Geometry getActiveScreenGeometry()
 {
     auto windowAttributes = getActiveWindow();
 
@@ -221,12 +269,10 @@ string select_screen()
         .filter!(line => line.canFind(" connected ")) // Spaces are important; don't match 'disconnected'
         .map!(line => Geometry(line)); // Extract geometries
 
-    Geometry screen = screens.filter!(geom => geom.containsPoint(centerX, centerY)).front;
-
-    return screen.str;
+    return screens.filter!(geom => geom.containsPoint(centerX, centerY)).front;
 }
 
-string select_full()
+Geometry getDesktopGeometry()
 {
-    return "200x100+50+50";
+    return Geometry("200x100+50+50");
 }
