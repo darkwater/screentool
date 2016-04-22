@@ -114,6 +114,7 @@ struct ScreentoolOptions
     bool captureScreen;
     bool captureEverything;
     bool quiet;
+    bool shortURL;
 
     bool validate(ref string message)
     {
@@ -148,6 +149,7 @@ int main(string[] args)
             "D|capture-desktop",  "Capture the entire desktop (default)",             &options.captureEverything,
             "u|upload",           "Upload image after capture",                       &options.uploadTargets,
             "U|list-uploaders",   "Print available uploaders",                        &options.printUploadTargets,
+            "m|minimize-url",     "Use a shortened URL where availible",              &options.shortURL,
             "q|quiet",            "Don't send notifications",                         &options.quiet);
 
     if (helpInfo.helpWanted)
@@ -214,10 +216,12 @@ int main(string[] args)
     string url;
     foreach (target; options.uploadTargets) final switch (target)
     {
-        case UploadTarget.novaember: url = uploaders.novaember(filepath); break;
-        case UploadTarget.imgur:     url = uploaders.imgur(filepath);     break;
-        case UploadTarget.pomf:      url = uploaders.pomf(filepath);      break;
+        case UploadTarget.novaember: url = uploaders.novaember(filepath, options.shortURL); break;
+        case UploadTarget.imgur:     url = uploaders.imgur    (filepath, options.shortURL); break;
+        case UploadTarget.pomf:      url = uploaders.pomf     (filepath, options.shortURL); break;
     }
+
+    copyToClipboard(url);
 
     if (!options.quiet)
         notify("Image uploaded!", url);
@@ -227,7 +231,7 @@ int main(string[] args)
 
 void notify(string header, string bodyStr)
 {
-     execute([ "notify-send", header, bodyStr]);
+     execute([ "notify-send", header, bodyStr ]);
 }
 
 void copyToClipboard(string text)

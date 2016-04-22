@@ -9,7 +9,7 @@ import std.string: chomp;
 import std.json;
 import std.stdio;
 
-string novaember(string filepath)
+string novaember(string filepath, bool shortURL)
 {
     // TODO: Optionally read directly from env var
     string secret = read(environment.get("HOME") ~ "/.nvsecret").text.chomp;
@@ -21,8 +21,8 @@ string novaember(string filepath)
 
     // TODO: Handle issues
     JSONValue json = parseJSON(curl.output);
-    return json["url"].str;
+    return shortURL ? json["shorturl"].str : json["url"].str;
 }
 
-string imgur(string filepath) { return "imgur!"; }
-string pomf (string filepath) { return "pomf!";  }
+string imgur(string filepath, bool shortURL) { return "imgur!"; }
+string pomf (string filepath, bool shortURL) { return "pomf!";  }
