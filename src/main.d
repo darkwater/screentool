@@ -140,6 +140,11 @@ ScreentoolOptions options;
 
 int main(string[] args)
 {
+    if (args.length < 2) {
+        writefln("Error: no options specified, try running %s -h", args[0]);
+        return 0;
+    }
+
     // Don't forget to update ScreentoolOptions#validate when changing options
     auto helpInfo = getopt(args,
             std.getopt.config.caseSensitive,
