@@ -35,7 +35,7 @@ import uploaders;
     ✔ open feh
     ✔ upload
       ✔ copy url to clipboard
-      - show notification
+      ✔ show notification
 
     Uploaders:
     ✔ novaember
@@ -113,6 +113,8 @@ struct ScreentoolOptions
     bool captureWindow;
     bool captureScreen;
     bool captureEverything;
+    bool quiet;
+    bool shortURL;
 
     bool validate(ref string message)
     {
@@ -138,6 +140,11 @@ ScreentoolOptions options;
 
 int main(string[] args)
 {
+    if (args.length < 2) {
+        writefln("Error: no options specified, try running %s -h", args[0]);
+        return 0;
+    }
+
     // Don't forget to update ScreentoolOptions#validate when changing options
     auto helpInfo = getopt(args,
             std.getopt.config.caseSensitive,
@@ -146,7 +153,9 @@ int main(string[] args)
             "S|capture-screen",   "Capture the screen containing the active window",  &options.captureScreen,
             "D|capture-desktop",  "Capture the entire desktop (default)",             &options.captureEverything,
             "u|upload",           "Upload image after capture",                       &options.uploadTargets,
-            "U|list-uploaders",   "Print available uploaders",                        &options.printUploadTargets);
+            "U|list-uploaders",   "Print available uploaders",                        &options.printUploadTargets,
+            "m|minimize-url",     "Use a shortened URL where availible",              &options.shortURL,
+            "q|quiet",            "Don't send notifications",                         &options.quiet);
 
     if (helpInfo.helpWanted)
     {
@@ -204,17 +213,30 @@ int main(string[] args)
         return maim.status;
     }
 
+    if (!options.quiet)
+        notify("Uploading image..", "");
 
     // Stage three: post actions
 
+    string url;
     foreach (target; options.uploadTargets) final switch (target)
     {
-        case UploadTarget.novaember: uploaders.novaember(filepath).copyToClipboard(); break;
-        case UploadTarget.imgur:     uploaders.imgur    (filepath).copyToClipboard(); break;
-        case UploadTarget.pomf:      uploaders.pomf     (filepath).copyToClipboard(); break;
+        case UploadTarget.novaember: url = uploaders.novaember(filepath, options.shortURL); break;
+        case UploadTarget.imgur:     url = uploaders.imgur    (filepath, options.shortURL); break;
+        case UploadTarget.pomf:      url = uploaders.pomf     (filepath, options.shortURL); break;
     }
 
+    copyToClipboard(url);
+
+    if (!options.quiet)
+        notify("Image uploaded!", url);
+
     return 0;
+}
+
+void notify(string header, string bodyStr)
+{
+     execute([ "notify-send", header, bodyStr ]);
 }
 
 void copyToClipboard(string text)
