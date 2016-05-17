@@ -88,6 +88,20 @@ struct Geometry
         return g;
     }
 
+    static Geometry opCall(Geometry a, Geometry b)
+    {
+        int x = min(a.x, b.x);
+        int y = min(a.y, b.y);
+
+        int right  = max(a.x + a.width,  b.x + b.width);
+        int bottom = max(a.y + a.height, b.y + b.height);
+
+        uint width  = right - x;
+        uint height = bottom - y;
+
+        return Geometry(width, height, x, y);
+    }
+
     bool containsPoint(int x, int y)
     {
         return ( x > this.x && y > this.y
@@ -250,6 +264,17 @@ void copyToClipboard(string text)
     xclipClipboard.stdin.write(text);
 }
 
+auto getScreenGeometries()
+{
+    auto xrandr = execute([ "xrandr", "--current" ]);
+
+    // Example line: VGA1 connected primary 1920x1200+0+0 (normal left inverted right x axis y axis) 518mm x 324mm
+    return xrandr.output.splitLines()
+        .filter!(line => line.canFind(" connected ")) // Spaces are important; don't match 'disconnected'
+        .map!   (line => Geometry(line)) // Extract geometries
+        .filter!(geom => geom.area > 0); // Reject invalid geometries (unused screens)
+}
+
 XWindowAttributes getActiveWindow()
 {
     Display* display = XOpenDisplay(null);
@@ -296,18 +321,12 @@ Geometry getActiveScreenGeometry()
     int centerX = windowAttributes.x + windowAttributes.width / 2;
     int centerY = windowAttributes.y + windowAttributes.height / 2;
 
-    auto xrandr = execute([ "xrandr", "--current" ]);
-
-    // Example line: VGA1 connected primary 1920x1200+0+0 (normal left inverted right x axis y axis) 518mm x 324mm
-    auto screens = xrandr.output.splitLines()
-        .filter!(line => line.canFind(" connected ")) // Spaces are important; don't match 'disconnected'
-        .map!   (line => Geometry(line)) // Extract geometries
-        .filter!(geom => geom.area > 0); // Reject invalid geometries (unused screens)
+    auto screens = getScreenGeometries();
 
     return screens.filter!(geom => geom.containsPoint(centerX, centerY)).front;
 }
 
 Geometry getDesktopGeometry()
 {
-    return Geometry("200x100+50+50");
+    return getScreenGeometries().fold!((a, b) => Geometry(a, b));
 }
