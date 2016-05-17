@@ -69,6 +69,8 @@ struct Geometry
         auto match = str.matchFirst(regex(r"(\d+)x(\d+)\+(\d+)\+(\d+)"));
 
         Geometry g;
+        if (!match) return g;
+
         g.width = match[1].to!uint;
         g.height = match[2].to!uint;
         g.x = match[3].to!int;
@@ -299,7 +301,8 @@ Geometry getActiveScreenGeometry()
     // Example line: VGA1 connected primary 1920x1200+0+0 (normal left inverted right x axis y axis) 518mm x 324mm
     auto screens = xrandr.output.splitLines()
         .filter!(line => line.canFind(" connected ")) // Spaces are important; don't match 'disconnected'
-        .map!(line => Geometry(line)); // Extract geometries
+        .map!   (line => Geometry(line)) // Extract geometries
+        .filter!(geom => geom.area > 0); // Reject invalid geometries (unused screens)
 
     return screens.filter!(geom => geom.containsPoint(centerX, centerY)).front;
 }
